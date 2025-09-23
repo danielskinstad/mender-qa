@@ -297,6 +297,20 @@ EOF
 SRCTREECOVEREDTASKS:remove = "do_patch"
 
 EOF
+    # For now the mender-orchestrator-support version is hardcoded to master as we don't yet
+    # have the logic to checkout revisions.
+    # This will be aligned with the other closed-source components in QA-1180
+    local version="main-git%"
+    s3cmd get s3://${S3_BUCKET_NAME}/mender-orchestrator/${version}/mender-orchestrator-${version}.tar.xz $WORKSPACE/downloads
+    cat >> $BUILDDIR/conf/local.conf <<EOF
+PREFERRED_VERSION:pn-mender-orchestrator-support = "$version"
+EOF
+
+    cat >> $BUILDDIR/conf/local.conf <<EOF
+# When using externalsrc from CI, we still want to apply patches
+SRCTREECOVEREDTASKS:remove = "do_patch"
+
+EOF
 
     # Use network cache if present, if not, use local cache.
     if [ -d /mnt/sstate-cache ]; then
