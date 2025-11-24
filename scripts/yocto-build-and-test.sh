@@ -153,6 +153,21 @@ is_closed_source() {
     esac
 }
 
+add_virtualization() {
+    echo "Adding virtualization layers"
+
+    bitbake-layers add-layer $WORKSPACE/meta-virtualization
+    bitbake-layers add-layer $WORKSPACE/meta-mender/meta-mender-extended
+    bitbake-layers add-layer $WORKSPACE/meta-openembedded/meta-filesystems
+    bitbake-layers add-layer $WORKSPACE/meta-openembedded/meta-networking
+
+    cat >> $BUILDDIR/conf/local.conf <<EOF
+DISTRO_FEATURES:append = " virtualization"
+MENDER_STORAGE_TOTAL_SIZE_MB_DEFAULT = "2048"
+MENDER_DATA_PART_SIZE_MB = "512"
+EOF
+}
+
 prepare_build_config() {
     local machine
     machine=$1
@@ -164,6 +179,10 @@ prepare_build_config() {
     else
         echo "Could not find build-conf for $board board."
         return 1
+    fi
+
+    if [ "${BUILD_VIRTUALIZATION}" = "true" ]; then
+        add_virtualization
     fi
 
     # Checked out open source components:
@@ -607,10 +626,20 @@ build_and_test_client() {
 
         if ${BUILD_DOCKER_IMAGES:-false}; then
             filename="clean-${image_name}-${machine_name}.${extension}"
-            $WORKSPACE/meta-mender/meta-mender-qemu/docker/build-docker \
-                -I "${BUILDDIR}/tmp/deploy/images/${machine_name}/${filename}.gz" \
-                $machine_name \
-                -t mendersoftware/mender-client-qemu:pr
+
+            # Choose docker tag based on whether we're building with virtualization
+            if [ "$board_name" = "qemux86-64-uefi-grub" ]; then
+                if [ "${BUILD_VIRTUALIZATION}" = "true" ]; then
+                    docker_tag="mendersoftware/mender-client-qemu-virtualization:pr"
+                else
+                    docker_tag="mendersoftware/mender-client-qemu:pr"
+                fi
+
+                $WORKSPACE/meta-mender/meta-mender-qemu/docker/build-docker \
+                    -I "${BUILDDIR}/tmp/deploy/images/${machine_name}/${filename}.gz" \
+                    $machine_name \
+                    -t "$docker_tag"
+            fi
 
             if grep mender-image-full-cmdline-rofs <<<"$images_to_build"; then
                 filename="clean-mender-image-full-cmdline-rofs-${machine_name}.${extension}"
@@ -739,16 +768,16 @@ build_and_test_client() {
     )
 }
 
-# add_to_build_list        MACHINE_NAME              BOARD_NAME                     IMAGE_NAME               [DEVICE_TYPE]
-add_to_build_list          qemux86-64                qemux86-64-uefi-grub           core-image-full-cmdline
-add_to_build_list          vexpress-qemu             vexpress-qemu                  core-image-full-cmdline
-add_to_build_list          vexpress-qemu-flash       vexpress-qemu-flash            core-image-minimal
-add_to_build_list          raspberrypi3              raspberrypi3                   core-image-full-cmdline
-add_to_build_list          raspberrypi4              raspberrypi4                   core-image-full-cmdline
-add_to_build_list          beaglebone-yocto          beagleboneblack                core-image-base          beaglebone-yocto-grub
-add_to_build_list          qemux86-64                qemux86-64-bios-grub-gpt       core-image-full-cmdline  qemux86-64-bios-grub-gpt
-add_to_build_list          qemux86-64                qemux86-64-bios-grub           core-image-full-cmdline  qemux86-64-bios
-add_to_build_list          vexpress-qemu             vexpress-qemu-uboot-uefi-grub  core-image-full-cmdline  vexpress-qemu-grub
+# add_to_build_list        MACHINE_NAME              BOARD_NAME                           IMAGE_NAME               [DEVICE_TYPE]
+add_to_build_list          qemux86-64                qemux86-64-uefi-grub                 core-image-full-cmdline
+add_to_build_list          vexpress-qemu             vexpress-qemu                        core-image-full-cmdline
+add_to_build_list          vexpress-qemu-flash       vexpress-qemu-flash                  core-image-minimal
+add_to_build_list          raspberrypi3              raspberrypi3                         core-image-full-cmdline
+add_to_build_list          raspberrypi4              raspberrypi4                         core-image-full-cmdline
+add_to_build_list          beaglebone-yocto          beagleboneblack                      core-image-base          beaglebone-yocto-grub
+add_to_build_list          qemux86-64                qemux86-64-bios-grub-gpt             core-image-full-cmdline  qemux86-64-bios-grub-gpt
+add_to_build_list          qemux86-64                qemux86-64-bios-grub                 core-image-full-cmdline  qemux86-64-bios
+add_to_build_list          vexpress-qemu             vexpress-qemu-uboot-uefi-grub        core-image-full-cmdline  vexpress-qemu-grub
 
 # main
 init_environment
